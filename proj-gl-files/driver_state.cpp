@@ -20,7 +20,13 @@ void initialize_render(driver_state& state, int width, int height)
     state.image_height=height;
     state.image_color=0;
     state.image_depth=0;
-    std::cout<<"TODO: allocate and initialize state.image_color and state.image_depth."<<std::endl;
+    //std::cout<<"TODO: allocate and initialize state.image_color and state.image_depth."<<std::endl;
+
+    int size = state.image_width * state.image_height;
+    state.image_color = new pixel[size];
+    for(int i = 0; i < size; ++i) {
+	state.image_color[i] = make_pixel(0, 0, 0);
+    }
 }
 
 // This function will be called to render the data that has been stored in this class.
@@ -32,7 +38,34 @@ void initialize_render(driver_state& state, int width, int height)
 //   render_type::strip -    The vertices are to be interpreted as a triangle strip.
 void render(driver_state& state, render_type type)
 {
-    std::cout<<"TODO: implement rendering."<<std::endl;
+    //std::cout<<"TODO: implement rendering."<<std::endl;
+    switch(type) {
+	case render_type::triangle:
+	{
+		const data_geometry *vertexArray[3];
+		data_geometry temp[3];
+		data_vertex a, b, c;
+
+		a.data = &state.vertex_data[0];
+		b.data = &state.vertex_data[1 * state.floats_per_vertex];
+		c.data = &state.vertex_data[2 * state.floats_per_vertex];
+
+		temp[0].data = a.data;
+		temp[1].data = b.data;
+		temp[2].data = c.data;
+
+		state.vertex_shader(a, temp[0], state.uniform_data);
+		state.vertex_shader(b, temp[1], state.uniform_data);
+		state.vertex_shader(c, temp[2], state.uniform_data);
+
+		for(int i = 0; i < 3; i++) {
+			vertexArray[i] = &temp[i];
+		}
+		
+		rasterize_triangle(state, vertexArray);
+		break;
+	}
+    }
 }
 
 
