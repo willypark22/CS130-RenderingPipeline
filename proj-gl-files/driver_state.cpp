@@ -38,7 +38,6 @@ void initialize_render(driver_state& state, int width, int height)
 //   render_type::strip -    The vertices are to be interpreted as a triangle strip.
 void render(driver_state& state, render_type type)
 {
-    //std::cout<<"TODO: implement rendering."<<std::endl;
 
     for(int i = 0; i <= (state.num_vertices * 3); i += (3 * state.floats_per_vertex)) {
     	switch(type) {
@@ -112,16 +111,17 @@ void rasterize_triangle(driver_state& state, const data_geometry* in[3])
     
     float aX = 0, aY = 0, bX = 0, bY = 0, cX = 0, cY = 0;
     float alpha = 0, beta = 0, gamma = 0;
+    data_fragment fragment;
     
     auto w = state.image_width;
     auto h = state.image_height;
     
-    aX = (w/2) * in[0]->gl_Position[0] + ((w/2) - (1/2));
-    aY = (h/2) * in[0]->gl_Position[1] + ((h/2) - (1/2));
-    bX = (w/2) * in[1]->gl_Position[0] + ((w/2) - (1/2));
-    bY = (h/2) * in[1]->gl_Position[1] + ((h/2) - (1/2));
-    cX = (w/2) * in[2]->gl_Position[0] + ((w/2) - (1/2));
-    cY = (h/2) * in[2]->gl_Position[1] + ((h/2) - (1/2));
+    aX = (w/2) * in[0]->gl_Position[0] / in[0]->gl_Position[3] + ((w/2) - (1/2));
+    aY = (h/2) * in[0]->gl_Position[1] / in[0]->gl_Position[3] + ((h/2) - (1/2));
+    bX = (w/2) * in[1]->gl_Position[0] / in[1]->gl_Position[3] + ((w/2) - (1/2));
+    bY = (h/2) * in[1]->gl_Position[1] / in[1]->gl_Position[3] + ((h/2) - (1/2));
+    cX = (w/2) * in[2]->gl_Position[0] / in[2]->gl_Position[3] + ((w/2) - (1/2));
+    cY = (h/2) * in[2]->gl_Position[1] / in[2]->gl_Position[3] + ((h/2) - (1/2));
     
     for(auto i = 0; i < w; i++) {
 	float area = (cX - aX) * (bY - aY) - (cY - aY) * (bX - aX);
@@ -129,15 +129,48 @@ void rasterize_triangle(driver_state& state, const data_geometry* in[3])
 		alpha = (i - bX) * (cY - bY) - (j - bY) * (cX - bX); 
 		beta = (i - cX) * (aY - cY) - (j - cY) * (aX - cX);
 		gamma = (i - aX) * (bY - aY) - (j - aY) * (bX - aX);
+
 		alpha /= area;
 		beta /= area;
 		gamma /= area;
+		
+		/*float fragData[MAX_FLOATS_PER_VERTEX];
+		data_fragment fragment{fragData};*/
 
 		if(alpha >= 0 && beta >= 0 && gamma >= 0) {
-			state.image_color[i + j * w] = make_pixel(255.0, 255.0, 255.0);
+			for(int k = 0; k < state.floats_per_vertex; k++) {
+				switch(state.interp_rules[k]) {
+					case interp_type::flat:{
+						fragment.data[k] = in[0]->data[k];
+						break;
+					}
+				
+					case interp_type::smooth:{
+						float const_k = (alpha / in[0]->gl_Position[3]) + (beta / in[1]->gl_Position[3]) + (gamma / in[2]->gl_Position[3]);
+						float alpha1 = (alpha / in[0]->gl_Position[3]) / const_k;
+						float beta1 = (beta / in[1]->gl_Position[3]) / const_k;
+						float gamma1 = (gamma / in[2]->gl_Position[3]) / const_k;
+						fragment.data[k] = alpha1 * in[0]->data[k] + beta1 * in[1]->data[k] + gamma1 * in[2]->data[k];
+						break;
+					}		
+
+					case interp_type::noperspective:{
+						fragment.data[k] = alpha * in[0]->data[k] + beta * in[1]->data[k] + gamma * in[2]->data[k];
+						break;
+					}		
+			
+					case interp_type::invalid:{	
+						break;	
+					}
+				}
+    			}
+
+			data_output out;
+			state.fragment_shader(fragment, out, state.uniform_data);
+			state.image_color[i + j * w] = make_pixel(out.output_color[0] * 255.0, out.output_color[1] * 255.0, out.output_color[2] * 255.0);
+				
 		}
 	}
     }
-    
 }
 
