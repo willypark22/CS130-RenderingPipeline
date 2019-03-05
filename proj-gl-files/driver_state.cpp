@@ -39,32 +39,38 @@ void initialize_render(driver_state& state, int width, int height)
 void render(driver_state& state, render_type type)
 {
 
-    for(int i = 0; i <= (state.num_vertices * 3); i += (3 * state.floats_per_vertex)) {
+    int numTriangles = state.num_vertices / 3.0;
+
     	switch(type) {
 		case render_type::triangle:
 		{
 			const data_geometry *vertexArray[3];
 			data_geometry temp[3];
 			data_vertex a, b, c;
+			int index = 0;
 		
-			a.data = &state.vertex_data[i];
-			b.data = &state.vertex_data[i + (1 * state.floats_per_vertex)];
-			c.data = &state.vertex_data[i + (2 * state.floats_per_vertex)];
-		
-			temp[0].data = a.data;
-			temp[1].data = b.data;
-			temp[2].data = c.data;
-		
-			state.vertex_shader(a, temp[0], state.uniform_data);
-			state.vertex_shader(b, temp[1], state.uniform_data);
-			state.vertex_shader(c, temp[2], state.uniform_data);
-		
-			for(int i = 0; i < 3; i++) {
-				vertexArray[i] = &temp[i];
-			}	
-				
-			rasterize_triangle(state, vertexArray);
-	
+			for(int i = 0; i < numTriangles; i++) {
+				a.data = &state.vertex_data[index];
+				index += state.floats_per_vertex;
+				b.data = &state.vertex_data[index];
+				index += state.floats_per_vertex;
+				c.data = &state.vertex_data[index];
+				index += state.floats_per_vertex;
+			
+				temp[0].data = a.data;
+				temp[1].data = b.data;
+				temp[2].data = c.data;
+			
+				state.vertex_shader(a, temp[0], state.uniform_data);
+				state.vertex_shader(b, temp[1], state.uniform_data);
+				state.vertex_shader(c, temp[2], state.uniform_data);
+			
+				for(int i = 0; i < 3; i++) {
+					vertexArray[i] = &temp[i];
+				}	
+					
+				rasterize_triangle(state, vertexArray);
+			}
 			break;
 		}
 		
@@ -83,7 +89,6 @@ void render(driver_state& state, render_type type)
 			//
 		}
 	}
-    }
 }
 
 
@@ -107,11 +112,9 @@ void clip_triangle(driver_state& state, const data_geometry* in[3],int face)
 // fragments, calling the fragment shader, and z-buffering.
 void rasterize_triangle(driver_state& state, const data_geometry* in[3])
 {
-    //std::cout<<"TODO: implement rasterization"<<std::endl;
     
     float aX = 0, aY = 0, bX = 0, bY = 0, cX = 0, cY = 0;
     float alpha = 0, beta = 0, gamma = 0;
-    data_fragment fragment;
     
     auto w = state.image_width;
     auto h = state.image_height;
@@ -134,8 +137,8 @@ void rasterize_triangle(driver_state& state, const data_geometry* in[3])
 		beta /= area;
 		gamma /= area;
 		
-		/*float fragData[MAX_FLOATS_PER_VERTEX];
-		data_fragment fragment{fragData};*/
+		float fragData[MAX_FLOATS_PER_VERTEX];
+		data_fragment fragment{fragData};
 
 		if(alpha >= 0 && beta >= 0 && gamma >= 0) {
 			for(int k = 0; k < state.floats_per_vertex; k++) {
@@ -173,4 +176,3 @@ void rasterize_triangle(driver_state& state, const data_geometry* in[3])
 	}
     }
 }
-
