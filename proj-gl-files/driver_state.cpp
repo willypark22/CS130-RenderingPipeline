@@ -23,7 +23,7 @@ void initialize_render(driver_state &state, int width, int height)
     state.image_height = height;
     state.image_color = 0;
     state.image_depth = 0;
-    //std::cout << "TODO: allocate and initialize state.image_color and state.image_depth." << std::endl;
+    // std::cout << "TODO: allocate and initialize state.image_color and state.image_depth." << std::endl;
 
     state.image_color = new pixel[width * height];
 
@@ -46,7 +46,7 @@ void initialize_render(driver_state &state, int width, int height)
 void render(driver_state &state, render_type type)
 {
     // std::cout << "TODO: implement rendering." << std::endl;
-
+    int numTriangles = state.num_vertices / 3;
     switch (type)
     {
     case render_type::triangle:
@@ -54,11 +54,10 @@ void render(driver_state &state, render_type type)
         const data_geometry *d_GeometryArr[3];
         data_geometry g[3];
         data_vertex v[3];
-        int num_triangles = state.num_vertices / 3;
 
         int k = 0;
 
-        for (int i = 0; i < num_triangles; ++i)
+        for (int i = 0; i < numTriangles; ++i)
         {
             for (int j = 0; j < 3; ++j)
             {
@@ -68,7 +67,6 @@ void render(driver_state &state, render_type type)
                 d_GeometryArr[j] = &g[j];
                 k += state.floats_per_vertex;
             }
-            // rasterize_triangle(state, d_GeometryArr);
             clip_triangle(state, d_GeometryArr, 0);
         }
         break;
@@ -76,11 +74,75 @@ void render(driver_state &state, render_type type)
     case render_type::invalid:
         break;
     case render_type::indexed:
-        break;
+    {
+      const data_geometry *d_GeometryArr[3];
+      data_geometry g[3];
+      data_vertex v[3];
+
+      for (int i = 0; i < state.num_triangles*3; i +=3)
+      {
+        for(int j = 0; j < 3; ++j) {
+          v[j].data = &state.vertex_data[state.index_data[i + j]*state.floats_per_vertex];
+          g[j].data = v[j].data;
+          state.vertex_shader(v[j], g[j], state.uniform_data);
+          d_GeometryArr[j] = &g[j];
+        }
+        clip_triangle(state, d_GeometryArr, 0);
+      }
+      break;
+    }
     case render_type::fan:
-        break;
+    {
+      const data_geometry *d_GeometryArr[3];
+      data_geometry g[3];
+      data_vertex v[3];
+
+      int k = state.floats_per_vertex;
+
+      for (int i = 0; i < state.num_vertices; ++i)
+      {
+          for (int j = 0; j < 3; ++j)
+          {
+            if(j == 0) {
+              v[j].data = &state.vertex_data[0];
+            }
+            else {
+              v[j].data = &state.vertex_data[k];
+              if(j == 1) {
+                k += state.floats_per_vertex;
+              }
+            }
+            g[j].data = v[j].data;
+            state.vertex_shader(v[j], g[j], state.uniform_data);
+            d_GeometryArr[j] = &g[j];
+          }
+          clip_triangle(state, d_GeometryArr, 0);
+      }
+      break;
+  	}
     case render_type::strip:
-        break;
+		{
+      const data_geometry *d_GeometryArr[3];
+      data_geometry g[3];
+      data_vertex v[3];
+
+      int k = 0;
+
+      for (int i = 0; i < state.num_vertices - 2; ++i)
+      {
+          if(k != 0) {k -= (2*state.floats_per_vertex);}
+          for (int j = 0; j < 3; ++j)
+          {
+              v[j].data = &state.vertex_data[k];
+              g[j].data = v[j].data;
+              state.vertex_shader(v[j], g[j], state.uniform_data);
+              d_GeometryArr[j] = &g[j];
+              k += state.floats_per_vertex;
+          }
+          clip_triangle(state, d_GeometryArr, 0);
+      }
+			break;
+		}
     default:
         break;
     }
@@ -175,132 +237,6 @@ void clip_triangle(driver_state &state, const data_geometry *in[3], int face)
         clip_triangle(state, _in, face + 1);
 }
 
-// This function clips a triangle (defined by the three vertices in the "in" array).
-// It will be called recursively, once for each clipping face (face=0, 1, ..., 5) to
-// clip against each of the clipping faces in turn.  When face=6, clip_triangle should
-// simply pass the call on to rasterize_triangle.
-/*void clip_triangle(driver_state &state, const data_geometry *in[3], int face)
-{
-    vec4 a = in[0]->gl_Position;
-	  vec4 b = in[1]->gl_Position;
-	  vec4 c = in[2]->gl_Position;
-    int axis = face % 3;
-    int sign = 2*(face%2)-1;
-
-    if (face == 6)
-    {
-        rasterize_triangle(state, in);
-        return;
-    }
-    if(face == 0) {
-      clip_triangle(state, in, face + 1);
-    }
-    if(face == 1) {
-      clip_triangle(state, in, face + 1);
-    }
-    if(face == 2) {
-      clip_triangle(state, in, face + 1);
-    }
-    if(face == 3) {
-      clip_triangle(state, in, face + 1);
-    }
-    if(face == 4) {
-      clip_triangle(state, in, face + 1);
-    }
-    if(face == 5) { //clipping the near plane
-      vec3 InOrOut;
-      for(int i = 0; i < 3; ++i) {
-        if(sign > 0) {
-          if(a[axis] < a[3]) {
-            InOrOut[i] = true;
-          }
-          else {InOrOut[i] = false;}
-        }
-        else {
-          if(a[axis] > -(a[3])) {
-            InOrOut[i] = true;
-          }
-          else {InOrOut[i] = false;}
-        }
-      }
-      //A is outside, but B and C are inside
-      if(!InOrOut[0] && InOrOut[1] && InOrOut[2]) {
-          //cout << "entered" << endl;
-          data_geometry in2[3]; //triangle 1
-          data_geometry in3[3]; //triangle 2
-          float AB_t = (sign*b[3] - b[axis]) / (a[axis] - sign*a[3] + sign*b[3] - b[axis]);
-          float AC_t = (sign*c[3] - c[axis]) / (a[axis] - sign*a[3] + sign*c[3] - c[axis]);
-          vec4 ab = b - a;
-          vec4 ac = c - a;
-          in2[0].gl_Position = b; //new vertex
-          in2[1].gl_Position = c; //new vertex
-          in2[2].gl_Position = ac; //Line Segment AC
-
-          in3[0].gl_Position = b; //new vertex
-          in3[1].gl_Position = ac; //Line Segment AC
-          in3[2].gl_Position = ab; //Line Segment AB
-
-          //not sure if its less than or equal to
-          for(int i = 0; i < state.floats_per_vertex; ++i) {
-            if(state.interp_rules[i] == interp_type::flat) {
-              in2[0].data = in[0]->data;
-              in2[1].data = in[0]->data;
-              in2[2].data = in[0]->data;
-
-              in3[0].data = in[0]->data;
-              in3[1].data = in[0]->data;
-              in3[2].data = in[0]->data;
-            }
-            else if(state.interp_rules[i] == interp_type::smooth) {
-              in2[0].data = in[1]->data;
-              in2[1].data = in[2]->data;
-              in2[2].data[i] = AC_t * in[0]->data[i] + (1 - AC_t) * in[2]->data[i]; //AC
-
-              in3[0].data = in[1]->data;
-              in3[1].data[i] = AC_t * in[0]->data[i] + (1 - AC_t) * in[2]->data[i]; //AC
-              in3[2].data[i] = AB_t * in[0]->data[i] + (1 - AB_t) * in[1]->data[i]; //AB
-            }
-            else if(state.interp_rules[i] == interp_type::noperspective) {
-              float AB_k = 1.0 / (AB_t * a[3] + (1 - AB_t) * b[3]);
-              float AC_k = 1.0 / (AC_t * a[3] + (1 - AC_t) * c[3]);
-              float AB_tnop = AB_t * a[3] * AB_k;
-              float AC_tnop = AC_t * a[3] * AC_k;
-              in2[0].data = in[1]->data;
-              in2[1].data = in[2]->data;
-              in2[2].data[i] = AC_tnop * in[0]->data[i] + (1 - AC_tnop) * in[2]->data[i]; //AC
-
-              in3[0].data = in[1]->data;
-              in3[1].data[i] = AC_tnop * in[0]->data[i] + (1 - AC_tnop) * in[2]->data[i]; //AC
-              in3[2].data[i] = AB_tnop * in[0]->data[i] + (1 - AB_tnop) * in[1]->data[i]; //AB
-            }
-          }
-          for(int i = 0; i < 3; i++) {
-            in[i] = &in2[i];
-          }
-          clip_triangle(state, in, face + 1);
-          for(int i = 0; i < 3; i++) {
-            in[i] = &in3[i];
-          }
-          clip_triangle(state, in, face + 1);
-      }
-      else {
-        // cout << "entered" << endl;
-        rasterize_triangle(state, in);
-        return;
-      }
-      // //all vertices inside
-      // if(InOrOut[0] && InOrOut[1] && InOrOut[2]) {
-      //   clip_triangle(state, in, face + 1);
-      // }
-      // //all vertices are outside
-      // else if(!(InOrOut[0] && InOrOut[1] && InOrOut[2])) {
-      //   rasterize_triangle(state, in);
-      //   return;
-      // }
-    }
-    // std::cout << "TODO: implement clipping. (The current code passes the triangle through without clipping them.)" << std::endl;
-}*/
-
 // Rasterize the triangle defined by the three vertices in the "in" array.  This
 // function is responsible for rasterization, interpolation of data to
 // fragments, calling the fragment shader, and z-buffering.
@@ -338,7 +274,6 @@ void rasterize_triangle(driver_state &state, const data_geometry *in[3])
 
                 if (state.image_depth[i + j * state.image_width] > zDepth)
                 {
-
                     data_fragment d_frag;
                     d_frag.data = new float[state.floats_per_vertex];
                     data_output d_output;
